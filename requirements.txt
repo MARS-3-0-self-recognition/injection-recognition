@@ -1,0 +1,6 @@
+inspect-ai
+openai
+anthropic
+vllm
+transformers
+accelerate
