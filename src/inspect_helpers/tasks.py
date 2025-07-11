@@ -10,7 +10,7 @@ from typing import Callable
 @task
 def injection_consistency_and_recognition(
     csv_file_path: str,
-    treatment_col: str,
+    treatment_col: str = None,
     prompt_template_path: str = "prompts/prompt_template.txt",
     prefix_template_path: str = "prompts/prefix_template.txt",
     passage_column: str = "text",
@@ -32,9 +32,9 @@ You are comparing the Task 2 Answer with the correct answer on a given question.
 ************
 [Question]: {question}
 ************
-[Correct Answer]: {criterion}
+[Submission]: {prefix}{answer}
 ************
-[Submission]: {answer}
+[Correct Answer]: {"YES" if criterion else "NO"}
 ************
 [END DATA]
 
