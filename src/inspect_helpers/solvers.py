@@ -13,11 +13,11 @@ def prefill_generate(
 ) -> Solver: 
     
     async def solve(state: TaskState, generate: Generate) -> TaskState:
-        if prefill_message or state.metadata[PREFILL_KEY] is not None:
-            if prefill_message:
-                state.messages.append(ChatMessageAssistant(content=state.metadata[PREFILL_KEY]))  
-            else:
-                state.messages.append(ChatMessageAssistant(content=state.metadata[PREFILL_KEY]))
+        if state.metadata[PREFILL_KEY] is None:
+            if prefill_message is not None:
+                state.messages.append(ChatMessageAssistant(content=prefill_message))
+        else:
+            state.messages.append(ChatMessageAssistant(content=state.metadata[PREFILL_KEY]))  
         return await generate(state, tool_calls=tool_calls, cache=cache, **kwargs)
 
     return solve

@@ -1,5 +1,6 @@
 from inspect_ai.scorer import model_graded_fact, scorer, accuracy, stderr
 from inspect_ai.scorer._match import match_str, str_match_scorer
+from src.inspect_helpers.datasets import PREFILL_KEY
 from typing import Literal
 
 
@@ -37,7 +38,7 @@ You are comparing Task 2 with the correct answer on a given question. Here is th
 ************
 [Question]: {{question}}
 ************
-[Submission]: {{prefill}}{{answer}}
+[Submission]: {{{PREFILL_KEY}}}{{answer}}
 ************
 [Correct Answer]: {criterion}
 ************
