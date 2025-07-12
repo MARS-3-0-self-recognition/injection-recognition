@@ -1,0 +1,5 @@
+Treatment,Injection Detected,Treatment Identified
+Control,TRUE,TRUE
+Capitalization,FALSE,FALSE
+Spelling,FALSE,NONE
+Semantic Inversion,TRUE,TRUE
