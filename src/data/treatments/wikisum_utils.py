@@ -11,6 +11,7 @@ import pandas as pd
 from pathlib import Path
 from typing import List, Optional, Union
 import csv
+import random
 
 # Add the current directory to the Python path to import our modules
 import sys
@@ -20,40 +21,72 @@ from string_modifier import randomly_capitalize_string
 from wiki_article_processor import WikiArticleProcessor
 
 
-def get_WikiSum(start_idx: int, end_idx: int, use_huggingface: bool = True) -> pd.DataFrame:
+def get_WikiSum(start_idx: Optional[int] = None, 
+                end_idx: Optional[int] = None, 
+                indices: Optional[List[int]] = None,
+                use_huggingface: bool = True,
+                save_path: Optional[Union[str, Path]] = None) -> pd.DataFrame:
     """
-    Get WikiSum articles by index range and return as DataFrame.
+    Get WikiSum articles by index range, specific indices, or return as DataFrame.
     
     Args:
-        start_idx (int): Starting index (inclusive)
-        end_idx (int): Ending index (exclusive)
+        start_idx (Optional[int]): Starting index (inclusive) - for range-based selection
+        end_idx (Optional[int]): Ending index (exclusive) - for range-based selection  
+        indices (Optional[List[int]]): List of specific article indices to grab
         use_huggingface (bool): If True, load from Hugging Face datasets library
+        save_path (Optional[Union[str, Path]]): Custom path to save the resulting CSV. If None, use default.
         
     Returns:
         pd.DataFrame: DataFrame containing the requested articles
         
     Raises:
-        ValueError: If invalid range or no articles found
+        ValueError: If invalid parameters or no articles found
     """
-    # Validate range
-    if start_idx < 0 or end_idx <= start_idx:
-        raise ValueError(f"Invalid range: start_idx={start_idx}, end_idx={end_idx}")
+    # Validate input parameters
+    if indices is not None:
+        # Specific indices mode
+        if not isinstance(indices, list) or len(indices) == 0:
+            raise ValueError("indices must be a non-empty list of integers")
+        if not all(isinstance(i, int) and i >= 0 for i in indices):
+            raise ValueError("All indices must be non-negative integers")
+        
+        # Remove duplicates and sort for consistent caching
+        unique_indices = sorted(list(set(indices)))
+        indices_str = "_".join(map(str, unique_indices))
+        filename = f"wikisum_indices_{indices_str}.csv"
+        
+    elif start_idx is not None and end_idx is not None:
+        # Range-based mode (original functionality)
+        if start_idx < 0 or end_idx <= start_idx:
+            raise ValueError(f"Invalid range: start_idx={start_idx}, end_idx={end_idx}")
+        
+        filename = f"wikisum_{start_idx}_{end_idx}.csv"
+        
+    else:
+        raise ValueError("Must provide either (start_idx, end_idx) or indices")
     
-    # Create filename based on range
-    filename = f"wikisum_{start_idx}_{end_idx}.csv"
+    # Determine file path
+    if save_path is not None:
+        file_path = Path(save_path)
+        use_default_path = False
+    else:
+        output_dir = Path(__file__).parent / "output"
+        output_dir.mkdir(exist_ok=True)
+        file_path = output_dir / filename
+        use_default_path = True
     
-    # Ensure output directory exists
-    output_dir = Path(__file__).parent / "output"
-    output_dir.mkdir(exist_ok=True)
-    file_path = output_dir / filename
-    
-    # Check if file already exists
-    if file_path.exists():
+    # Only load from cache if using the default path
+    if use_default_path and file_path.exists():
         print(f"Loading existing CSV: {file_path}")
         return pd.read_csv(file_path)
     
     # Load from WikiSum dataset
-    print(f"Loading WikiSum articles {start_idx} to {end_idx-1}...")
+    if indices is not None:
+        print(f"Loading WikiSum articles with indices: {unique_indices}")
+    else:
+        end_idx_print = end_idx - 1 if end_idx is not None else 'None'
+        print(f"Loading WikiSum articles {start_idx} to {end_idx_print}...")
+    
     processor = WikiArticleProcessor()
     
     if use_huggingface:
@@ -64,16 +97,31 @@ def get_WikiSum(start_idx: int, end_idx: int, use_huggingface: bool = True) -> p
     if not articles:
         raise ValueError("No articles found in WikiSum dataset")
     
-    # Validate range against available articles
-    if end_idx > len(articles):
-        print(f"Warning: end_idx {end_idx} exceeds available articles ({len(articles)}). Using {len(articles)} instead.")
-        end_idx = len(articles)
-    
-    # Extract requested range
-    selected_articles = articles[start_idx:end_idx]
+    # Select articles based on mode
+    if indices is not None:
+        # Specific indices mode
+        max_idx = len(articles) - 1
+        valid_indices = [i for i in unique_indices if i <= max_idx]
+        
+        if len(valid_indices) != len(unique_indices):
+            invalid_indices = [i for i in unique_indices if i > max_idx]
+            print(f"Warning: Some indices exceed available articles ({len(articles)}). Skipping: {invalid_indices}")
+        
+        if not valid_indices:
+            raise ValueError(f"No valid indices found. Max available index: {max_idx}")
+        
+        selected_articles = [articles[i] for i in valid_indices]
+        
+    else:
+        # Range-based mode
+        if end_idx is not None and end_idx > len(articles):
+            print(f"Warning: end_idx {end_idx} exceeds available articles ({len(articles)}). Using {len(articles)} instead.")
+            end_idx = len(articles)
+        
+        selected_articles = articles[start_idx:end_idx]
     
     if not selected_articles:
-        raise ValueError(f"No articles found in range {start_idx} to {end_idx}")
+        raise ValueError(f"No articles found for the specified selection")
     
     # Convert to DataFrame
     df = pd.DataFrame(selected_articles)
@@ -84,6 +132,61 @@ def get_WikiSum(start_idx: int, end_idx: int, use_huggingface: bool = True) -> p
     
     print(f"Loaded {len(df)} articles")
     return df
+
+
+def get_WikiSum_random(n: int, 
+                      max_articles: Optional[int] = None,
+                      use_huggingface: bool = True,
+                      seed: Optional[int] = None,
+                      save_path: Optional[Union[str, Path]] = None) -> pd.DataFrame:
+    """
+    Get N random WikiSum articles.
+    
+    Args:
+        n (int): Number of random articles to grab
+        max_articles (Optional[int]): Maximum number of articles to consider for random selection.
+                                     If None, will load the full dataset to determine the maximum.
+        use_huggingface (bool): If True, load from Hugging Face datasets library
+        seed (Optional[int]): Random seed for reproducible results
+        save_path (Optional[Union[str, Path]]): Custom path to save the resulting CSV. If None, use default.
+        
+    Returns:
+        pd.DataFrame: DataFrame containing the requested random articles
+        
+    Raises:
+        ValueError: If invalid parameters or no articles found
+    """
+    if n <= 0:
+        raise ValueError("n must be a positive integer")
+    
+    # Set random seed if provided
+    if seed is not None:
+        random.seed(seed)
+    
+    # If max_articles not provided, we need to load the dataset to determine the size
+    if max_articles is None:
+        processor = WikiArticleProcessor()
+        if use_huggingface:
+            articles = processor.load_wikisum_dataset(use_huggingface=True)
+        else:
+            articles = processor.load_wikisum_dataset()
+        
+        if not articles:
+            raise ValueError("No articles found in WikiSum dataset")
+        
+        max_articles = len(articles)
+    
+    if n > max_articles:
+        print(f"Warning: Requested {n} articles but only {max_articles} available. Using {max_articles} instead.")
+        n = max_articles
+    
+    # Generate random indices
+    random_indices = random.sample(range(max_articles), n)
+    
+    print(f"Selected random indices: {random_indices}")
+    
+    # Use the specific indices functionality as the base
+    return get_WikiSum(indices=random_indices, use_huggingface=use_huggingface, save_path=save_path)
 
 
 def truncate_text(text: str, percentage: int) -> str:
