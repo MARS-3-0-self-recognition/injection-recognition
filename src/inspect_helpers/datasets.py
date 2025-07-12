@@ -4,6 +4,8 @@ from typing import List
 from inspect_ai.dataset import Sample, MemoryDataset
 import urllib.parse
 
+PREFILL_KEY = "prefill"
+ROW_INDEX_KEY = "row_index"
 
 def load_prompt_template(template_path: str) -> str:
     """Load a prompt template from a file."""
@@ -45,13 +47,13 @@ def safe_url_encode(text: str) -> str:
 
 def create_samples_from_csv(
     csv_file_path: str,
-    treatment_col: str,
+    treatment_col: str = None,
+    passage_column: str = "text",
     prompt_template_path: str = "prompts/prompt_template.txt",
     prefix_template_path: str = "prompts/prefix_template.txt",
-    passage_column: str = "text"
 ) -> List[Sample]:
     """
-    Create Inspect AI samples from CSV file with treatments as pre-fill injections.
+    Create Inspect AI samples from CSV file with treatments as pre-fills.
     
     Args:
         csv_file_path: Path to the CSV file containing treatments and passages
@@ -75,38 +77,34 @@ def create_samples_from_csv(
         
         for row_idx, row in enumerate(reader):
             passage = row.get(passage_column, "")
+
+            # Format the prompt with the passage
+            formatted_prompt = prompt_template.format(passage=passage)
             
-            injection = row.get(treatment_col, "")
-            
-            if injection:  # Only create sample if treatment has a value
-                # Format the prompt with the passage
-                formatted_prompt = prompt_template.format(passage=passage)
-                
-                # Format the prefix with the injection
-                formatted_prefix = prefix_template.format(injection=injection)
-                
+            def get_prefill(treatment_col: str | None) -> tuple[str | None]:
+                if treatment_col is None:
+                    return None, None
+                prefill = row.get(treatment_col, "")
+                # Format the prefix with the prefill
+                formatted_prefill = prefix_template.format(prefill=prefill)
                 # URL-encode the treatment column name for safe use in IDs
                 safe_treatment_col = safe_url_encode(treatment_col)
                 
-                # Create the sample
-                sample = Sample(
-                    input=formatted_prompt,
-                    target="YES",
-                    id=f"row_{row_idx}_{safe_treatment_col}",
-                    metadata={
-                        "row_index": row_idx,
-                        "treatment_column": treatment_col,  # Keep original for reference
-                        "treatment_column_encoded": safe_treatment_col,  # Add encoded version
-                        "injection": injection,
-                        "passage": passage,
-                        "csv_file": os.path.basename(csv_file_path)
-                    }
-                )
-                
-                # Add the prefix as a system message or pre-fill
-                # This will be handled by the solver configuration
-                sample.metadata["prefix"] = formatted_prefix
-                
-                samples.append(sample)
+                return safe_treatment_col, formatted_prefill
+
+            safe_treatment_col, formatted_prefill = get_prefill(treatment_col)
+            # Create the sample
+            sample = Sample(
+                input=formatted_prompt,
+                metadata={
+                    ROW_INDEX_KEY: row_idx,
+                    PREFILL_KEY: formatted_prefill,
+                    "treatment_column": safe_treatment_col,
+                    "passage": passage,
+                    "csv_file": os.path.basename(csv_file_path)
+                }
+            )
+            
+            samples.append(sample)
     
     return MemoryDataset(samples)
