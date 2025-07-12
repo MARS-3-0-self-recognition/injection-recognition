@@ -13,8 +13,8 @@ def load_prompt_template(template_path: str) -> str:
         return f.read()
 
 
-def load_prefix_template(template_path: str) -> str:
-    """Load a prefix template from a file."""
+def load_prefill_template(template_path: str) -> str:
+
     with open(template_path, 'r', encoding='utf-8') as f:
         return f.read()
 
@@ -50,7 +50,7 @@ def create_samples_from_csv(
     treatment_col: str = None,
     passage_column: str = "text",
     prompt_template_path: str = "prompts/prompt_template.txt",
-    prefix_template_path: str = "prompts/prefix_template.txt",
+    prefill_template_path: str = "prompts/prefix_template.txt",
 ) -> List[Sample]:
     """
     Create Inspect AI samples from CSV file with treatments as pre-fills.
@@ -59,7 +59,7 @@ def create_samples_from_csv(
         csv_file_path: Path to the CSV file containing treatments and passages
         treatment_col: Name of the column containing treatment values
         prompt_template_path: Path to the prompt template file
-        prefix_template_path: Path to the prefix template file
+        prefill_template_path: Path to the prefix template file
         passage_column: Name of the column containing passage text
     
     Returns:
@@ -69,7 +69,7 @@ def create_samples_from_csv(
     
     # Load templates
     prompt_template = load_prompt_template(prompt_template_path)
-    prefix_template = load_prefix_template(prefix_template_path)
+    prefill_template = load_prefill_template(prefill_template_path)
     
     # Read CSV data
     with open(csv_file_path, 'r', encoding='utf-8') as f:
@@ -85,8 +85,8 @@ def create_samples_from_csv(
                 if treatment_col is None:
                     return None, None
                 prefill = row.get(treatment_col, "")
-                # Format the prefix with the prefill
-                formatted_prefill = prefix_template.format(prefill=prefill)
+                
+                formatted_prefill = prefill_template.format(prefill=prefill)
                 # URL-encode the treatment column name for safe use in IDs
                 safe_treatment_col = safe_url_encode(treatment_col)
                 
