@@ -111,4 +111,34 @@ def main():
 
 
 if __name__ == "__main__":
-    main() 
+    main()
+
+    print("\n=== TESTING get_WikiSum EXTENSIONS ===")
+    from wikisum_utils import get_WikiSum, get_WikiSum_random
+
+    # Test 1: Specific indices
+    try:
+        print("\nTest 1: get_WikiSum with indices=[0, 2, 4]")
+        df_indices = get_WikiSum(indices=[0, 2, 4], use_huggingface=True)
+        print(df_indices.head())
+        print(f"Returned {len(df_indices)} articles.")
+    except Exception as e:
+        print(f"Test 1 failed: {e}")
+
+    # Test 2: Random articles
+    try:
+        print("\nTest 2: get_WikiSum_random with n=3")
+        df_random = get_WikiSum_random(n=3, use_huggingface=True, seed=42)
+        print(df_random.head())
+        print(f"Returned {len(df_random)} random articles.")
+    except Exception as e:
+        print(f"Test 2 failed: {e}")
+
+    # Test 3: Custom save_path
+    try:
+        print("\nTest 3: get_WikiSum with indices=[1, 3] and custom save_path='custom_test_articles.csv'")
+        df_custom = get_WikiSum(indices=[1, 3], use_huggingface=True, save_path="custom_test_articles.csv")
+        print(df_custom.head())
+        print(f"Returned {len(df_custom)} articles. Saved to custom_test_articles.csv")
+    except Exception as e:
+        print(f"Test 3 failed: {e}") 
