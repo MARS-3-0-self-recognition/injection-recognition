@@ -48,6 +48,7 @@ def safe_url_encode(text: str) -> str:
 def create_samples_from_csv(
     csv_file_path: str,
     treatment_col: str = None,
+    default_prefill: str = "",
     passage_column: str = "text",
     prompt_template_path: str = "prompts/prompt_template.txt",
     prefill_template_path: str = "prompts/prefix_template.txt",
@@ -81,9 +82,9 @@ def create_samples_from_csv(
             # Format the prompt with the passage
             formatted_prompt = prompt_template.format(passage=passage)
             
-            def get_prefill(treatment_col: str | None) -> tuple[str | None]:
+            def get_prefill(treatment_col: str | None) -> tuple[str, str]:
                 if treatment_col is None:
-                    return None, None
+                    return "", default_prefill
                 prefill = row.get(treatment_col, "")
                 
                 formatted_prefill = prefill_template.format(prefill=prefill)

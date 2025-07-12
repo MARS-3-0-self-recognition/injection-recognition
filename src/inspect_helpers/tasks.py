@@ -29,6 +29,7 @@ def injection_consistency_and_recognition(
         dataset=create_samples_from_csv(
             csv_file_path=csv_file_path,
             treatment_col=treatment_col,
+            default_prefill=default_prefill,
             prompt_template_path=prompt_template_path,
             prefill_template_path=prefill_template_path,
             passage_column=passage_column,
