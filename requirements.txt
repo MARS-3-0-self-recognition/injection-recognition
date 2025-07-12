@@ -4,3 +4,5 @@ anthropic
 vllm
 transformers
 accelerate
+pandas
+datasets
