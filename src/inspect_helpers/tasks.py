@@ -12,9 +12,11 @@ from typing import Callable
 def injection_consistency_and_recognition(
     csv_file_path: str,
     treatment_col: str | None,
+    scorers: list[str] | None,
     scorer_criteria: str | list[str],
     default_prefill: str = "Task 1:",
     prompt_template_path: str = "prompts/prompt_template.txt",
+    prompt_template_args: dict[str, str] = {},
     prefill_template_path: str = "prompts/prefix_template.txt",
     passage_column: str = "text",
 ) -> Task:
@@ -30,6 +32,7 @@ def injection_consistency_and_recognition(
             csv_file_path=csv_file_path,
             treatment_col=treatment_col,
             default_prefill=default_prefill,
+            prompt_template_args=prompt_template_args,
             prompt_template_path=prompt_template_path,
             prefill_template_path=prefill_template_path,
             passage_column=passage_column,
