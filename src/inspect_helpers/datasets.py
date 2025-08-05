@@ -51,6 +51,7 @@ def create_samples_from_csv(
     default_prefill: str = "",
     passage_column: str = "text",
     prompt_template_path: str = "prompts/prompt_template.txt",
+    prompt_template_args: dict[str, str] = {},
     prefill_template_path: str = "prompts/prefix_template.txt",
 ) -> List[Sample]:
     """
@@ -80,14 +81,21 @@ def create_samples_from_csv(
             passage = row.get(passage_column, "")
 
             # Format the prompt with the passage
-            formatted_prompt = prompt_template.format(passage=passage)
+            formatted_prompt = prompt_template.format(passage=passage, **prompt_template_args)
             
             def get_prefill(treatment_col: str | None) -> tuple[str, str]:
                 if treatment_col is None:
                     return "", default_prefill
                 prefill = row.get(treatment_col, "")
                 
+                # Strip any trailing whitespace to prevent API errors
+                prefill = prefill.strip()
+                
                 formatted_prefill = prefill_template.format(prefill=prefill)
+                
+                # Always strip the final result to ensure no trailing whitespace
+                formatted_prefill = formatted_prefill.rstrip()
+                
                 # URL-encode the treatment column name for safe use in IDs
                 safe_treatment_col = safe_url_encode(treatment_col)
                 

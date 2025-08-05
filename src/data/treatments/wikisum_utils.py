@@ -10,7 +10,6 @@ This module provides simplified functions for:
 import pandas as pd
 from pathlib import Path
 from typing import List, Optional, Union
-import csv
 import random
 
 # Add the current directory to the Python path to import our modules
@@ -20,12 +19,192 @@ sys.path.append(str(Path(__file__).parent))
 from string_modifier import randomly_capitalize_string
 from wiki_article_processor import WikiArticleProcessor
 
+# Global dataset cache to avoid reloading
+# Now supports cache keys like 'huggingface_all', 'huggingface_train_validation', 'local_all', etc.
+_dataset_cache = {}
+
+
+def _get_cached_dataset(use_huggingface: bool = True, splits: Optional[List[str]] = None):
+    """
+    Get dataset from cache or load it if not cached.
+    
+    Args:
+        use_huggingface (bool): Whether to use HuggingFace datasets
+        splits (Optional[List[str]]): Which splits to include ['train', 'validation', 'test'].
+                                     If None, includes all splits.
+        
+    Returns:
+        List[dict]: Cached or newly loaded articles
+    """
+    # Create cache key that includes splits info
+    if splits is None:
+        splits_key = "all"
+    else:
+        splits_key = "_".join(sorted(splits))
+    
+    cache_key = f"{'huggingface' if use_huggingface else 'local'}_{splits_key}"
+    
+    if cache_key not in _dataset_cache or _dataset_cache[cache_key] is None:
+        print(f"Loading WikiSum dataset ({'HuggingFace' if use_huggingface else 'local'}) with splits {splits or 'all'} - this will be cached for future use...")
+        processor = WikiArticleProcessor()
+        
+        if use_huggingface:
+            all_articles = processor.load_wikisum_dataset(use_huggingface=True)
+            
+            # Filter by splits if specified
+            if splits is not None:
+                valid_splits = ['train', 'validation', 'test']
+                invalid_splits = [s for s in splits if s not in valid_splits]
+                if invalid_splits:
+                    print(f"Warning: Invalid splits specified: {invalid_splits}. Valid splits are: {valid_splits}")
+                
+                valid_requested_splits = [s for s in splits if s in valid_splits]
+                if not valid_requested_splits:
+                    raise ValueError(f"No valid splits specified. Valid splits are: {valid_splits}")
+                
+                articles = [article for article in all_articles 
+                           if article.get('split') in valid_requested_splits]
+                print(f"Filtered to {len(articles)} articles from splits: {valid_requested_splits}")
+            else:
+                articles = all_articles
+        else:
+            # Local datasets typically don't have split information
+            articles = processor.load_wikisum_dataset(use_huggingface=False)
+            if splits is not None:
+                print("Warning: Split filtering is not supported for local datasets. Loading all data.")
+            
+        _dataset_cache[cache_key] = articles
+        print(f"Dataset cached! Future calls will be much faster.")
+    else:
+        print(f"Using cached dataset ({len(_dataset_cache[cache_key])} articles)")
+        
+    return _dataset_cache[cache_key]
+
+
+def _filter_columns(df: pd.DataFrame, columns: Optional[List[str]] = None) -> pd.DataFrame:
+    """
+    Filter DataFrame to keep only specified columns.
+    
+    Args:
+        df (pd.DataFrame): Input DataFrame
+        columns (Optional[List[str]]): List of column names to keep. If None, keep all columns.
+        
+    Returns:
+        pd.DataFrame: Filtered DataFrame
+    """
+    if columns is None:
+        return df
+    
+    available_columns = df.columns.tolist()
+    missing_columns = [col for col in columns if col not in available_columns]
+    if missing_columns:
+        print(f"Warning: Columns not found in data: {missing_columns}")
+    
+    valid_columns = [col for col in columns if col in available_columns]
+    if valid_columns:
+        return df[valid_columns]
+    else:
+        print("Warning: No valid columns specified, keeping all columns")
+        return df
+
+
+def _generate_filename(start_idx: Optional[int] = None,
+                      end_idx: Optional[int] = None,
+                      indices: Optional[List[int]] = None,
+                      n_random: Optional[int] = None,
+                      seed: Optional[int] = None) -> str:
+    """
+    Generate filename based on parameters.
+    
+    Args:
+        start_idx (Optional[int]): Starting index for range-based selection
+        end_idx (Optional[int]): Ending index for range-based selection
+        indices (Optional[List[int]]): List of specific indices
+        n_random (Optional[int]): Number of random articles
+        seed (Optional[int]): Random seed used
+        
+    Returns:
+        str: Generated filename
+    """
+    if indices is not None:
+        # Specific indices mode
+        unique_indices = sorted(list(set(indices)))
+        n_count = len(unique_indices)
+        seed_str = f"_seed{seed}" if seed is not None else ""
+        return f"wikisum_n{n_count}{seed_str}.csv"
+    elif n_random is not None:
+        # Random mode
+        seed_str = f"_seed{seed}" if seed is not None else ""
+        return f"wikisum_random_n{n_random}{seed_str}.csv"
+    elif start_idx is not None and end_idx is not None:
+        # Range-based mode
+        return f"wikisum_{start_idx}_{end_idx}.csv"
+    else:
+        raise ValueError("Cannot generate filename: insufficient parameters")
+
+
+def _save_to_csv(df: pd.DataFrame, 
+                save_path: Optional[Union[str, Path]], 
+                start_idx: Optional[int] = None,
+                end_idx: Optional[int] = None,
+                indices: Optional[List[int]] = None,
+                n_random: Optional[int] = None,
+                seed: Optional[int] = None) -> None:
+    """
+    Save DataFrame to CSV if requested.
+    
+    Args:
+        df (pd.DataFrame): DataFrame to save
+        save_path (Optional[Union[str, Path]]): 
+            - None: don't save
+            - Directory path: save with auto-generated filename
+            - File path: save to this exact path
+        start_idx, end_idx, indices, n_random, seed: Parameters for filename generation
+    """
+    if save_path is None:
+        return
+    
+    file_path = Path(save_path)
+    
+    # If save_path is a directory, generate filename automatically
+    if file_path.is_dir() or (not file_path.suffix and not file_path.exists()):
+        # It's a directory or looks like a directory (no file extension)
+        filename = _generate_filename(start_idx, end_idx, indices, n_random, seed)
+        file_path = file_path / filename
+    
+    # Ensure parent directory exists
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    print(f"Saving to CSV: {file_path}")
+    df.to_csv(file_path, index=False)
+
+
+def _get_cached_csv(file_path: Path, columns: Optional[List[str]] = None) -> Optional[pd.DataFrame]:
+    """
+    Load DataFrame from cached CSV file with optional column filtering.
+    
+    Args:
+        file_path (Path): Path to cached CSV file
+        columns (Optional[List[str]]): Columns to keep
+        
+    Returns:
+        Optional[pd.DataFrame]: Loaded DataFrame if file exists, None otherwise
+    """
+    if not file_path.exists():
+        return None
+    
+    print(f"Loading existing CSV: {file_path}")
+    df = pd.read_csv(file_path)
+    return _filter_columns(df, columns)
+
 
 def get_WikiSum(start_idx: Optional[int] = None, 
                 end_idx: Optional[int] = None, 
                 indices: Optional[List[int]] = None,
                 use_huggingface: bool = True,
-                save_path: Optional[Union[str, Path]] = None) -> pd.DataFrame:
+                splits: Optional[List[str]] = None,
+                save_path: Optional[Union[str, Path]] = None,
+                columns: Optional[List[str]] = None) -> pd.DataFrame:
     """
     Get WikiSum articles by index range, specific indices, or return as DataFrame.
     
@@ -34,7 +213,10 @@ def get_WikiSum(start_idx: Optional[int] = None,
         end_idx (Optional[int]): Ending index (exclusive) - for range-based selection  
         indices (Optional[List[int]]): List of specific article indices to grab
         use_huggingface (bool): If True, load from Hugging Face datasets library
-        save_path (Optional[Union[str, Path]]): Custom path to save the resulting CSV. If None, use default.
+        splits (Optional[List[str]]): Which dataset splits to include ['train', 'validation', 'test'].
+                                     If None, includes all splits. Only works with HuggingFace datasets.
+        save_path (Optional[Union[str, Path]]): Path to save CSV. If None, don't save.
+        columns (Optional[List[str]]): List of column names to keep. If None, keep all columns.
         
     Returns:
         pd.DataFrame: DataFrame containing the requested articles
@@ -65,20 +247,15 @@ def get_WikiSum(start_idx: Optional[int] = None,
     else:
         raise ValueError("Must provide either (start_idx, end_idx) or indices")
     
-    # Determine file path
-    if save_path is not None:
-        file_path = Path(save_path)
-        use_default_path = False
-    else:
-        output_dir = Path(__file__).parent / "output"
-        output_dir.mkdir(exist_ok=True)
-        file_path = output_dir / filename
-        use_default_path = True
+    # Check for cached file (only when not saving or save_path matches cache)
+    output_dir = Path(__file__).parent / "output"
+    output_dir.mkdir(exist_ok=True)
+    cache_path = output_dir / filename
     
-    # Only load from cache if using the default path
-    if use_default_path and file_path.exists():
-        print(f"Loading existing CSV: {file_path}")
-        return pd.read_csv(file_path)
+    if cache_path.exists() and (save_path is None or Path(save_path) == cache_path):
+        df = _get_cached_csv(cache_path, columns)
+        if df is not None:
+            return df
     
     # Load from WikiSum dataset
     if indices is not None:
@@ -87,12 +264,7 @@ def get_WikiSum(start_idx: Optional[int] = None,
         end_idx_print = end_idx - 1 if end_idx is not None else 'None'
         print(f"Loading WikiSum articles {start_idx} to {end_idx_print}...")
     
-    processor = WikiArticleProcessor()
-    
-    if use_huggingface:
-        articles = processor.load_wikisum_dataset(use_huggingface=True)
-    else:
-        articles = processor.load_wikisum_dataset()
+    articles = _get_cached_dataset(use_huggingface, splits)
     
     if not articles:
         raise ValueError("No articles found in WikiSum dataset")
@@ -126,29 +298,33 @@ def get_WikiSum(start_idx: Optional[int] = None,
     # Convert to DataFrame
     df = pd.DataFrame(selected_articles)
     
-    # Save to CSV
-    print(f"Saving to CSV: {file_path}")
-    df.to_csv(file_path, index=False)
+    # Filter columns if specified
+    df = _filter_columns(df, columns)
+    
+    # Save to CSV if requested
+    _save_to_csv(df, save_path, start_idx, end_idx, indices)
     
     print(f"Loaded {len(df)} articles")
     return df
 
 
 def get_WikiSum_random(n: int, 
-                      max_articles: Optional[int] = None,
                       use_huggingface: bool = True,
                       seed: Optional[int] = None,
-                      save_path: Optional[Union[str, Path]] = None) -> pd.DataFrame:
+                      splits: Optional[List[str]] = None,
+                      save_path: Optional[Union[str, Path]] = None,
+                      columns: Optional[List[str]] = None) -> pd.DataFrame:
     """
-    Get N random WikiSum articles.
+    Get N random WikiSum articles efficiently.
     
     Args:
         n (int): Number of random articles to grab
-        max_articles (Optional[int]): Maximum number of articles to consider for random selection.
-                                     If None, will load the full dataset to determine the maximum.
         use_huggingface (bool): If True, load from Hugging Face datasets library
         seed (Optional[int]): Random seed for reproducible results
-        save_path (Optional[Union[str, Path]]): Custom path to save the resulting CSV. If None, use default.
+        splits (Optional[List[str]]): Which dataset splits to include ['train', 'validation', 'test'].
+                                     If None, includes all splits. Only works with HuggingFace datasets.
+        save_path (Optional[Union[str, Path]]): Path to save CSV. If None, don't save.
+        columns (Optional[List[str]]): List of column names to keep. If None, keep all columns.
         
     Returns:
         pd.DataFrame: DataFrame containing the requested random articles
@@ -163,30 +339,36 @@ def get_WikiSum_random(n: int,
     if seed is not None:
         random.seed(seed)
     
-    # If max_articles not provided, we need to load the dataset to determine the size
-    if max_articles is None:
-        processor = WikiArticleProcessor()
-        if use_huggingface:
-            articles = processor.load_wikisum_dataset(use_huggingface=True)
-        else:
-            articles = processor.load_wikisum_dataset()
-        
-        if not articles:
-            raise ValueError("No articles found in WikiSum dataset")
-        
-        max_articles = len(articles)
+    # Load dataset once and sample from it
+    print(f"Requesting {n} random articles...")
+    articles = _get_cached_dataset(use_huggingface, splits)
+    
+    if not articles:
+        raise ValueError("No articles found in WikiSum dataset")
+    
+    max_articles = len(articles)
     
     if n > max_articles:
         print(f"Warning: Requested {n} articles but only {max_articles} available. Using {max_articles} instead.")
         n = max_articles
     
-    # Generate random indices
+    # Sample random indices and get those articles directly
     random_indices = random.sample(range(max_articles), n)
+    selected_articles = [articles[i] for i in random_indices]
     
     print(f"Selected random indices: {random_indices}")
     
-    # Use the specific indices functionality as the base
-    return get_WikiSum(indices=random_indices, use_huggingface=use_huggingface, save_path=save_path)
+    # Convert to DataFrame
+    df = pd.DataFrame(selected_articles)
+    
+    # Filter columns if specified
+    df = _filter_columns(df, columns)
+    
+    # Save to CSV if requested
+    _save_to_csv(df, save_path, n_random=n, seed=seed)
+    
+    print(f"Loaded {len(df)} random articles")
+    return df
 
 
 def truncate_text(text: str, percentage: int) -> str:
@@ -271,7 +453,7 @@ def apply_treatments(df: pd.DataFrame,
             for cap_rate in cap_rates:
                 treatment_key = f"IL{length_pct}_S{cap_rate//25}"  # S1=25%, S2=50%, etc.
                 result_df[treatment_key] = il_text.apply(
-                    lambda x: randomly_capitalize_string(str(x), cap_rate)
+                    lambda x: randomly_capitalize_string(str(x), cap_rate).strip()
                 )
     
     # Apply typo treatments if specified
@@ -289,7 +471,7 @@ def apply_treatments(df: pd.DataFrame,
                 for i, typo_rate in enumerate(typo_rates):
                     treatment_key = f"IL{length_pct}_S{i+1}"  # S1, S2, S3...
                     result_df[treatment_key] = il_text.apply(
-                        lambda x: introduce_typos(str(x), substitute_rate=typo_rate)
+                        lambda x: introduce_typos(str(x), substitute_rate=typo_rate).strip()
                     )
             elif isinstance(typo_rates, dict):
                 # Detailed dict format - apply specific rates for each typo type
@@ -299,14 +481,14 @@ def apply_treatments(df: pd.DataFrame,
                         for rate_name, rate_value in rates.items():
                             treatment_key = f"IL{length_pct}_{treatment_name}_{rate_name}_{rate_value}"
                             result_df[treatment_key] = il_text.apply(
-                                lambda x: introduce_typos(str(x), **{rate_name: rate_value})
+                                lambda x: introduce_typos(str(x), **{rate_name: rate_value}).strip()
                             )
                     elif isinstance(rates, list):
                         # List of rates for a specific typo type
                         for i, rate_value in enumerate(rates):
                             treatment_key = f"IL{length_pct}_S{i+1}"  # S1, S2, S3...
                             result_df[treatment_key] = il_text.apply(
-                                lambda x: introduce_typos(str(x), **{treatment_name: rate_value})
+                                lambda x: introduce_typos(str(x), **{treatment_name: rate_value}).strip()
                             )
     
     # Apply any other custom treatments
@@ -320,7 +502,7 @@ def apply_treatments(df: pd.DataFrame,
                 for length_pct in summary_lengths:
                     il_text = result_df[f"IL{length_pct}"]
                     treatment_key = f"IL{length_pct}_{treatment_name}"
-                    result_df[treatment_key] = il_text.apply(treatment_func)
+                    result_df[treatment_key] = il_text.apply(lambda x: treatment_func(x).strip())
     
     # Print summary
     original_cols = len(df.columns)
@@ -362,16 +544,16 @@ def save_treated_data(df: pd.DataFrame,
     return str(file_path)
 
 
-def apply_treatments_separate(df: pd.DataFrame, 
-                            summary_lengths: List[int] = [33, 66, 100],
-                            treatment_params: Optional[dict] = None,
-                            start_idx: int = 0,
-                            end_idx: int = 0) -> dict:
+def apply_treatments_separate(csv_file_path: Union[str, Path], 
+                              injection_col: str = "model_summary",
+                              summary_lengths: List[int] = [33, 66, 100],
+                              treatment_params: Optional[dict] = None) -> dict:
     """
     Apply treatments to the summary column and create separate CSV files for each treatment type.
     
     Args:
-        df (pd.DataFrame): Input DataFrame with 'summary' column
+        csv_file_path (Union[str, Path]): Path to input CSV file with 'summary' column
+        injection_col (str): Name of the column to inject the treatments into
         summary_lengths (List[int]): List of summary length percentages (e.g., [33, 66, 100])
         treatment_params (Optional[dict]): Dictionary of treatment parameters
             - 'capitalization_rates': List[int] - Capitalization percentages (e.g., [25, 50, 75, 100])
@@ -390,15 +572,25 @@ def apply_treatments_separate(df: pd.DataFrame,
                     - 'typos_per_word': float - Number of typos per word (e.g., 0.5, 1.0, 2.0)
                     - 'typo_types': set - Set of typo types to use (e.g., {'drop_rate', 'add_rate'})
             - 'other_treatments': dict - Any other treatment parameters
-        start_idx (int): Starting index for filename
-        end_idx (int): Ending index for filename
     
     Returns:
         dict: Dictionary mapping treatment names to their output file paths
     """
+    # Load DataFrame from CSV
+    csv_path = Path(csv_file_path)
+    if not csv_path.exists():
+        raise FileNotFoundError(f"CSV file not found: {csv_path}")
+    
+    print(f"Loading DataFrame from: {csv_path}")
+    df = pd.read_csv(csv_path)
+    
     # Check if summary column exists
-    if 'summary' not in df.columns:
-        raise ValueError("DataFrame must contain 'summary' column")
+    if injection_col not in df.columns:
+        raise ValueError(f"CSV file must contain '{injection_col}' column")
+    
+    # Extract base filename and directory for output files
+    base_filename = csv_path.stem
+    input_dir = csv_path.parent
     
     # Default treatment parameters
     if treatment_params is None:
@@ -406,16 +598,12 @@ def apply_treatments_separate(df: pd.DataFrame,
             'capitalization_rates': [25, 50, 75, 100]
         }
     
-    # Ensure output directory exists
-    output_dir = Path(__file__).parent / "output"
-    output_dir.mkdir(exist_ok=True)
-    
     # Generate IL columns (summary lengths) - these will be in all files
     print(f"Generating summary length columns: {summary_lengths}")
     base_df = df.copy()
     for length_pct in summary_lengths:
         il_key = f"IL{length_pct}"
-        base_df[il_key] = df['summary'].apply(lambda x: truncate_text(str(x), length_pct))
+        base_df[il_key] = df[injection_col].apply(lambda x: truncate_text(str(x), length_pct))
     
     output_files = {}
     
@@ -436,7 +624,7 @@ def apply_treatments_separate(df: pd.DataFrame,
                 for cap_rate in cap_rates:
                     treatment_key = f"IL{length_pct}_S{cap_rate//25}"  # S1=25%, S2=50%, etc.
                     treatment_df[treatment_key] = il_text.apply(
-                        lambda x: randomly_capitalize_string(str(x), cap_rate)
+                        lambda x: randomly_capitalize_string(str(x), cap_rate).strip()
                     )
         
         elif treatment_name == 'typo_rates':
@@ -454,7 +642,7 @@ def apply_treatments_separate(df: pd.DataFrame,
                     for i, typo_rate in enumerate(typo_rates):
                         treatment_key = f"IL{length_pct}_S{i+1}"  # S1, S2, S3...
                         treatment_df[treatment_key] = il_text.apply(
-                            lambda x: introduce_typos(str(x), substitute_rate=typo_rate)
+                            lambda x: introduce_typos(str(x), substitute_rate=typo_rate).strip()
                         )
                 elif isinstance(typo_rates, dict):
                     # Handle different dict formats
@@ -464,7 +652,7 @@ def apply_treatments_separate(df: pd.DataFrame,
                             for i, rate_value in enumerate(rates):
                                 treatment_key = f"IL{length_pct}_S{i+1}"  # S1, S2, S3...
                                 treatment_df[treatment_key] = il_text.apply(
-                                    lambda x: introduce_typos(str(x), **{typo_key: rate_value})
+                                    lambda x: introduce_typos(str(x), **{typo_key: rate_value}).strip()
                                 )
                         elif isinstance(rates, dict):
                             # Check if this is the new per-word format
@@ -474,13 +662,13 @@ def apply_treatments_separate(df: pd.DataFrame,
                                 typo_types = rates.get('typo_types', None)
                                 treatment_key = f"IL{length_pct}_{typo_key}"
                                 treatment_df[treatment_key] = il_text.apply(
-                                    lambda x: introduce_typos_per_word(str(x), typos_per_word, typo_types)
+                                    lambda x: introduce_typos_per_word(str(x), typos_per_word, typo_types).strip()
                                 )
                             else:
                                 # Combined typo parameters (e.g., 'light', 'medium', 'heavy')
                                 treatment_key = f"IL{length_pct}_{typo_key}"
                                 treatment_df[treatment_key] = il_text.apply(
-                                    lambda x: introduce_typos(str(x), **rates)
+                                    lambda x: introduce_typos(str(x), **rates).strip()
                                 )
         
         elif treatment_name == 'other_treatments':
@@ -493,11 +681,11 @@ def apply_treatments_separate(df: pd.DataFrame,
                     for length_pct in summary_lengths:
                         il_text = treatment_df[f"IL{length_pct}"]
                         treatment_key = f"IL{length_pct}_{custom_name}"
-                        treatment_df[treatment_key] = il_text.apply(treatment_func)
+                        treatment_df[treatment_key] = il_text.apply(lambda x: treatment_func(x).strip())
         
         # Save this treatment to a separate CSV
-        filename = f"wikisum_{start_idx}_{end_idx}_{treatment_name}.csv"
-        file_path = output_dir / filename
+        filename = f"{base_filename}_{treatment_name}_injected.csv"
+        file_path = input_dir / filename
         treatment_df.to_csv(file_path, index=False)
         
         # Store the file path
@@ -509,3 +697,36 @@ def apply_treatments_separate(df: pd.DataFrame,
         print(f"✓ {treatment_name}: Added {new_cols} columns, saved to {file_path}")
     
     return output_files 
+
+
+def show_available_splits(use_huggingface: bool = True) -> dict:
+    """
+    Show available dataset splits and their sizes.
+    
+    Args:
+        use_huggingface (bool): If True, check HuggingFace datasets, otherwise local datasets
+        
+    Returns:
+        dict: Dictionary with split names as keys and article counts as values
+    """
+    if not use_huggingface:
+        print("Split information is only available for HuggingFace datasets.")
+        return {}
+    
+    # Load all articles to check splits
+    articles = _get_cached_dataset(use_huggingface=True, splits=None)
+    
+    # Count articles by split
+    split_counts = {}
+    for article in articles:
+        split_name = article.get('split', 'unknown')
+        split_counts[split_name] = split_counts.get(split_name, 0) + 1
+    
+    print("Available dataset splits:")
+    print("-" * 30)
+    for split_name, count in sorted(split_counts.items()):
+        print(f"{split_name:>12}: {count:>6} articles")
+    print("-" * 30)
+    print(f"{'Total':>12}: {sum(split_counts.values()):>6} articles")
+    
+    return split_counts 
