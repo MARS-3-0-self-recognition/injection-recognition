@@ -4,3 +4,4 @@
 __pycache__/
 2025-*
 *.egg-info/
+settings.json

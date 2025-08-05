@@ -453,7 +453,7 @@ def apply_treatments(df: pd.DataFrame,
             for cap_rate in cap_rates:
                 treatment_key = f"IL{length_pct}_S{cap_rate//25}"  # S1=25%, S2=50%, etc.
                 result_df[treatment_key] = il_text.apply(
-                    lambda x: randomly_capitalize_string(str(x), cap_rate)
+                    lambda x: randomly_capitalize_string(str(x), cap_rate).strip()
                 )
     
     # Apply typo treatments if specified
@@ -471,7 +471,7 @@ def apply_treatments(df: pd.DataFrame,
                 for i, typo_rate in enumerate(typo_rates):
                     treatment_key = f"IL{length_pct}_S{i+1}"  # S1, S2, S3...
                     result_df[treatment_key] = il_text.apply(
-                        lambda x: introduce_typos(str(x), substitute_rate=typo_rate)
+                        lambda x: introduce_typos(str(x), substitute_rate=typo_rate).strip()
                     )
             elif isinstance(typo_rates, dict):
                 # Detailed dict format - apply specific rates for each typo type
@@ -481,14 +481,14 @@ def apply_treatments(df: pd.DataFrame,
                         for rate_name, rate_value in rates.items():
                             treatment_key = f"IL{length_pct}_{treatment_name}_{rate_name}_{rate_value}"
                             result_df[treatment_key] = il_text.apply(
-                                lambda x: introduce_typos(str(x), **{rate_name: rate_value})
+                                lambda x: introduce_typos(str(x), **{rate_name: rate_value}).strip()
                             )
                     elif isinstance(rates, list):
                         # List of rates for a specific typo type
                         for i, rate_value in enumerate(rates):
                             treatment_key = f"IL{length_pct}_S{i+1}"  # S1, S2, S3...
                             result_df[treatment_key] = il_text.apply(
-                                lambda x: introduce_typos(str(x), **{treatment_name: rate_value})
+                                lambda x: introduce_typos(str(x), **{treatment_name: rate_value}).strip()
                             )
     
     # Apply any other custom treatments
@@ -502,7 +502,7 @@ def apply_treatments(df: pd.DataFrame,
                 for length_pct in summary_lengths:
                     il_text = result_df[f"IL{length_pct}"]
                     treatment_key = f"IL{length_pct}_{treatment_name}"
-                    result_df[treatment_key] = il_text.apply(treatment_func)
+                    result_df[treatment_key] = il_text.apply(lambda x: treatment_func(x).strip())
     
     # Print summary
     original_cols = len(df.columns)
@@ -544,16 +544,16 @@ def save_treated_data(df: pd.DataFrame,
     return str(file_path)
 
 
-def apply_treatments_separate(df: pd.DataFrame, 
-                            summary_lengths: List[int] = [33, 66, 100],
-                            treatment_params: Optional[dict] = None,
-                            start_idx: int = 0,
-                            end_idx: int = 0) -> dict:
+def apply_treatments_separate(csv_file_path: Union[str, Path], 
+                              injection_col: str = "model_summary",
+                              summary_lengths: List[int] = [33, 66, 100],
+                              treatment_params: Optional[dict] = None) -> dict:
     """
     Apply treatments to the summary column and create separate CSV files for each treatment type.
     
     Args:
-        df (pd.DataFrame): Input DataFrame with 'summary' column
+        csv_file_path (Union[str, Path]): Path to input CSV file with 'summary' column
+        injection_col (str): Name of the column to inject the treatments into
         summary_lengths (List[int]): List of summary length percentages (e.g., [33, 66, 100])
         treatment_params (Optional[dict]): Dictionary of treatment parameters
             - 'capitalization_rates': List[int] - Capitalization percentages (e.g., [25, 50, 75, 100])
@@ -572,15 +572,25 @@ def apply_treatments_separate(df: pd.DataFrame,
                     - 'typos_per_word': float - Number of typos per word (e.g., 0.5, 1.0, 2.0)
                     - 'typo_types': set - Set of typo types to use (e.g., {'drop_rate', 'add_rate'})
             - 'other_treatments': dict - Any other treatment parameters
-        start_idx (int): Starting index for filename
-        end_idx (int): Ending index for filename
     
     Returns:
         dict: Dictionary mapping treatment names to their output file paths
     """
+    # Load DataFrame from CSV
+    csv_path = Path(csv_file_path)
+    if not csv_path.exists():
+        raise FileNotFoundError(f"CSV file not found: {csv_path}")
+    
+    print(f"Loading DataFrame from: {csv_path}")
+    df = pd.read_csv(csv_path)
+    
     # Check if summary column exists
-    if 'summary' not in df.columns:
-        raise ValueError("DataFrame must contain 'summary' column")
+    if injection_col not in df.columns:
+        raise ValueError(f"CSV file must contain '{injection_col}' column")
+    
+    # Extract base filename and directory for output files
+    base_filename = csv_path.stem
+    input_dir = csv_path.parent
     
     # Default treatment parameters
     if treatment_params is None:
@@ -588,16 +598,12 @@ def apply_treatments_separate(df: pd.DataFrame,
             'capitalization_rates': [25, 50, 75, 100]
         }
     
-    # Ensure output directory exists
-    output_dir = Path(__file__).parent / "output"
-    output_dir.mkdir(exist_ok=True)
-    
     # Generate IL columns (summary lengths) - these will be in all files
     print(f"Generating summary length columns: {summary_lengths}")
     base_df = df.copy()
     for length_pct in summary_lengths:
         il_key = f"IL{length_pct}"
-        base_df[il_key] = df['summary'].apply(lambda x: truncate_text(str(x), length_pct))
+        base_df[il_key] = df[injection_col].apply(lambda x: truncate_text(str(x), length_pct))
     
     output_files = {}
     
@@ -618,7 +624,7 @@ def apply_treatments_separate(df: pd.DataFrame,
                 for cap_rate in cap_rates:
                     treatment_key = f"IL{length_pct}_S{cap_rate//25}"  # S1=25%, S2=50%, etc.
                     treatment_df[treatment_key] = il_text.apply(
-                        lambda x: randomly_capitalize_string(str(x), cap_rate)
+                        lambda x: randomly_capitalize_string(str(x), cap_rate).strip()
                     )
         
         elif treatment_name == 'typo_rates':
@@ -636,7 +642,7 @@ def apply_treatments_separate(df: pd.DataFrame,
                     for i, typo_rate in enumerate(typo_rates):
                         treatment_key = f"IL{length_pct}_S{i+1}"  # S1, S2, S3...
                         treatment_df[treatment_key] = il_text.apply(
-                            lambda x: introduce_typos(str(x), substitute_rate=typo_rate)
+                            lambda x: introduce_typos(str(x), substitute_rate=typo_rate).strip()
                         )
                 elif isinstance(typo_rates, dict):
                     # Handle different dict formats
@@ -646,7 +652,7 @@ def apply_treatments_separate(df: pd.DataFrame,
                             for i, rate_value in enumerate(rates):
                                 treatment_key = f"IL{length_pct}_S{i+1}"  # S1, S2, S3...
                                 treatment_df[treatment_key] = il_text.apply(
-                                    lambda x: introduce_typos(str(x), **{typo_key: rate_value})
+                                    lambda x: introduce_typos(str(x), **{typo_key: rate_value}).strip()
                                 )
                         elif isinstance(rates, dict):
                             # Check if this is the new per-word format
@@ -656,13 +662,13 @@ def apply_treatments_separate(df: pd.DataFrame,
                                 typo_types = rates.get('typo_types', None)
                                 treatment_key = f"IL{length_pct}_{typo_key}"
                                 treatment_df[treatment_key] = il_text.apply(
-                                    lambda x: introduce_typos_per_word(str(x), typos_per_word, typo_types)
+                                    lambda x: introduce_typos_per_word(str(x), typos_per_word, typo_types).strip()
                                 )
                             else:
                                 # Combined typo parameters (e.g., 'light', 'medium', 'heavy')
                                 treatment_key = f"IL{length_pct}_{typo_key}"
                                 treatment_df[treatment_key] = il_text.apply(
-                                    lambda x: introduce_typos(str(x), **rates)
+                                    lambda x: introduce_typos(str(x), **rates).strip()
                                 )
         
         elif treatment_name == 'other_treatments':
@@ -675,11 +681,11 @@ def apply_treatments_separate(df: pd.DataFrame,
                     for length_pct in summary_lengths:
                         il_text = treatment_df[f"IL{length_pct}"]
                         treatment_key = f"IL{length_pct}_{custom_name}"
-                        treatment_df[treatment_key] = il_text.apply(treatment_func)
+                        treatment_df[treatment_key] = il_text.apply(lambda x: treatment_func(x).strip())
         
         # Save this treatment to a separate CSV
-        filename = f"wikisum_{start_idx}_{end_idx}_{treatment_name}.csv"
-        file_path = output_dir / filename
+        filename = f"{base_filename}_{treatment_name}_injected.csv"
+        file_path = input_dir / filename
         treatment_df.to_csv(file_path, index=False)
         
         # Store the file path

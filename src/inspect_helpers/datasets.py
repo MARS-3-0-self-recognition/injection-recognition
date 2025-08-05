@@ -88,7 +88,14 @@ def create_samples_from_csv(
                     return "", default_prefill
                 prefill = row.get(treatment_col, "")
                 
+                # Strip any trailing whitespace to prevent API errors
+                prefill = prefill.strip()
+                
                 formatted_prefill = prefill_template.format(prefill=prefill)
+                
+                # Always strip the final result to ensure no trailing whitespace
+                formatted_prefill = formatted_prefill.rstrip()
+                
                 # URL-encode the treatment column name for safe use in IDs
                 safe_treatment_col = safe_url_encode(treatment_col)
                 
