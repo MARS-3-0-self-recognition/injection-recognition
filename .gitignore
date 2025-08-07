@@ -2,6 +2,7 @@
 .claude
 .pytest_cache/
 __pycache__/
-2025-*
 *.egg-info/
 settings.json
+*/wikihow_summary_injection_old
+*/wikihow_summary_injection_e2e_test
