@@ -5,7 +5,7 @@ from inspect_ai.scorer import model_graded_fact
 from inspect_ai.model import Model
 from src.inspect_helpers.solvers import prefill_generate
 from src.inspect_helpers.datasets import create_samples_from_csv
-from src.inspect_helpers.scorers import custom_match, custom_prompt_criterion_mgf
+from src.inspect_helpers.scorers import answer_match, which_treatment_mgf
 from typing import Callable
 # TODO: remove the hardcoded custom match target template i.e. "Answer - "
 
@@ -30,7 +30,22 @@ def injection_consistency_and_recognition(
     #             f"Match scorer criteria expects 'Yes' or 'No', got {scorer_criteria}. Converting to {match_criteria}"
     #         )
     #         scorer_criteria = match_criteria
-
+    
+    scorers = [
+        answer_match(
+            target=f"Answer - {scorer_criteria[0]}",
+            location="any",
+            ignore_case=True,
+        ),
+        which_treatment_mgf(
+            criterion=scorer_criteria[1],
+            model=scorer_model,
+        ),
+        # text_until_last_error(),
+    ]
+    # if "typo" in csv_file_path:
+    #     scorers.append(text_until_last_typo())
+        
     return Task(
         dataset=create_samples_from_csv(
             csv_file_path=csv_file_path,
@@ -42,16 +57,6 @@ def injection_consistency_and_recognition(
             passage_column=passage_column,
         ),
         solver=prefill_generate(default_prefill),
-        scorer=[
-            custom_match(
-                target=f"Answer - {scorer_criteria[0]}",
-                location="any",
-                ignore_case=True,
-            ),
-            custom_prompt_criterion_mgf(
-                criterion=scorer_criteria[1],
-                model=scorer_model,
-            ),
-        ],
+        scorer=scorers,
         model=task_model,
     )

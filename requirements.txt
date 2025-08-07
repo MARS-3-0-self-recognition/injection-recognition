@@ -1,4 +1,4 @@
-inspect-ai
+inspect-ai>=0.3.119
 openai
 anthropic
 vllm
@@ -6,3 +6,8 @@ transformers
 accelerate
 pandas
 datasets
+google-genai
+ipywidgets
+altair
+# language_tool_python
+# spellchecker
