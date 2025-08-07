@@ -14,22 +14,22 @@ from typing import Callable
 def injection_consistency_and_recognition(
     csv_file_path: str,
     treatment_col: str | None,
-    scorer_criteria: str | list[str],
+    scorer_criteria: tuple[str, str],
     default_prefill: str = "Task 1:",
     prompt_template_path: str = "prompts/prompt_template.txt",
     prompt_template_args: dict[str, str] = {},
-    prefill_template_path: str = "prompts/prefix_template.txt",
+    prefill_template_path: str = "prompts/prefill_template.txt",
     passage_column: str = "text",
-    model: str | Model | None = None,
+    task_model: str | Model | None = None,
     scorer_model: str | Model | None = None,
 ) -> Task:
-    if isinstance(scorer_criteria, str):
-        if scorer_criteria not in ["Yes", "No"]:
-            match_criteria = "No" if scorer_criteria == "None" else "Yes"
-            Warning(
-                f"Match scorer criteria expects 'Yes' or 'No', got {scorer_criteria}. Converting to {match_criteria}"
-            )
-            scorer_criteria = match_criteria
+    # if isinstance(scorer_criteria, str):
+    #     if scorer_criteria not in ["Yes", "No"]:
+    #         match_criteria = "No" if scorer_criteria == "None" else "Yes"
+    #         Warning(
+    #             f"Match scorer criteria expects 'Yes' or 'No', got {scorer_criteria}. Converting to {match_criteria}"
+    #         )
+    #         scorer_criteria = match_criteria
 
     return Task(
         dataset=create_samples_from_csv(
@@ -44,16 +44,14 @@ def injection_consistency_and_recognition(
         solver=prefill_generate(default_prefill),
         scorer=[
             custom_match(
-                target=f"Answer - {scorer_criteria[0] if isinstance(scorer_criteria, list) else match_criteria}",
+                target=f"Answer - {scorer_criteria[0]}",
                 location="any",
                 ignore_case=True,
             ),
             custom_prompt_criterion_mgf(
-                criterion=scorer_criteria[1]
-                if isinstance(scorer_criteria, list)
-                else scorer_criteria,
+                criterion=scorer_criteria[1],
                 model=scorer_model,
             ),
         ],
-        model=model,
+        model=task_model,
     )
