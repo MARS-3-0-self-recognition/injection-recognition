@@ -25,8 +25,8 @@ def main():
     # ========================================
     
     # Data range parameters
-    START_INDEX = 5    # Starting article index (inclusive)
-    END_INDEX = 10     # Ending article index (exclusive)
+    START_INDEX = 0    # Starting article index (inclusive)
+    END_INDEX = 20     # Ending article index (exclusive)
     
     # Summary length parameters (percentages)
     SUMMARY_LENGTHS = [33, 66, 100]  # IL33, IL66, IL100
@@ -75,10 +75,10 @@ def main():
     # Step 1: Get WikiSum data
     print("Step 1: Loading WikiSum data...")
     try:
-        df = get_WikiSum(START_INDEX, END_INDEX)
-        print(f"✓ Loaded {len(df)} articles")
+        df = get_WikiSum(start_idx=START_INDEX, end_idx=END_INDEX)
+        print(f"OK - Loaded {len(df)} articles")
     except Exception as e:
-        print(f"✗ Error loading data: {e}")
+        print(f"ERROR - Error loading data: {e}")
         return
     
     # Step 2: Apply treatments and save to separate CSV files
@@ -91,9 +91,9 @@ def main():
             start_idx=START_INDEX,
             end_idx=END_INDEX
         )
-        print("✓ All treatments applied and saved successfully")
+        print("OK - All treatments applied and saved successfully")
     except Exception as e:
-        print(f"✗ Error applying treatments: {e}")
+        print(f"ERROR - Error applying treatments: {e}")
         return
     
     # Summary
@@ -111,34 +111,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
-
-    print("\n=== TESTING get_WikiSum EXTENSIONS ===")
-    from wikisum_utils import get_WikiSum, get_WikiSum_random
-
-    # Test 1: Specific indices
-    try:
-        print("\nTest 1: get_WikiSum with indices=[0, 2, 4]")
-        df_indices = get_WikiSum(indices=[0, 2, 4], use_huggingface=True)
-        print(df_indices.head())
-        print(f"Returned {len(df_indices)} articles.")
-    except Exception as e:
-        print(f"Test 1 failed: {e}")
-
-    # Test 2: Random articles
-    try:
-        print("\nTest 2: get_WikiSum_random with n=3")
-        df_random = get_WikiSum_random(n=3, use_huggingface=True, seed=42)
-        print(df_random.head())
-        print(f"Returned {len(df_random)} random articles.")
-    except Exception as e:
-        print(f"Test 2 failed: {e}")
-
-    # Test 3: Custom save_path
-    try:
-        print("\nTest 3: get_WikiSum with indices=[1, 3] and custom save_path='custom_test_articles.csv'")
-        df_custom = get_WikiSum(indices=[1, 3], use_huggingface=True, save_path="custom_test_articles.csv")
-        print(df_custom.head())
-        print(f"Returned {len(df_custom)} articles. Saved to custom_test_articles.csv")
-    except Exception as e:
-        print(f"Test 3 failed: {e}") 
+    main() 
