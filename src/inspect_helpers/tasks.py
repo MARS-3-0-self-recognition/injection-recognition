@@ -7,6 +7,7 @@ from src.inspect_helpers.solvers import prefill_generate
 from src.inspect_helpers.datasets import create_samples_from_csv
 from src.inspect_helpers.scorers import answer_match, which_treatment_mgf
 from typing import Callable
+
 # TODO: remove the hardcoded custom match target template i.e. "Answer - "
 
 
@@ -16,36 +17,13 @@ def injection_consistency_and_recognition(
     treatment_col: str | None,
     scorer_criteria: tuple[str, str],
     default_prefill: str = "Task 1:",
-    prompt_template_path: str = "prompts/prompt_template.txt",
+    prompt_template_path: str = "prompts/prompt_template_v3.txt",
     prompt_template_args: dict[str, str] = {},
     prefill_template_path: str = "prompts/prefill_template.txt",
     passage_column: str = "text",
     task_model: str | Model | None = None,
     scorer_model: str | Model | None = None,
 ) -> Task:
-    # if isinstance(scorer_criteria, str):
-    #     if scorer_criteria not in ["Yes", "No"]:
-    #         match_criteria = "No" if scorer_criteria == "None" else "Yes"
-    #         Warning(
-    #             f"Match scorer criteria expects 'Yes' or 'No', got {scorer_criteria}. Converting to {match_criteria}"
-    #         )
-    #         scorer_criteria = match_criteria
-    
-    scorers = [
-        answer_match(
-            target=f"Answer - {scorer_criteria[0]}",
-            location="any",
-            ignore_case=True,
-        ),
-        which_treatment_mgf(
-            criterion=scorer_criteria[1],
-            model=scorer_model,
-        ),
-        # text_until_last_error(),
-    ]
-    # if "typo" in csv_file_path:
-    #     scorers.append(text_until_last_typo())
-        
     return Task(
         dataset=create_samples_from_csv(
             csv_file_path=csv_file_path,
@@ -57,6 +35,18 @@ def injection_consistency_and_recognition(
             passage_column=passage_column,
         ),
         solver=prefill_generate(default_prefill),
-        scorer=scorers,
+        scorer=[
+            answer_match(
+                correct_answer=scorer_criteria[0],
+                match_template_path="prompts/scorer_prompts/answer_match.txt",
+                location="any",
+                ignore_case=True,
+            ),
+            which_treatment_mgf(
+                correct_answer=scorer_criteria[1],
+                prompt_template_path="prompts/scorer_prompts/which_treatment_mgf.txt",
+                model=scorer_model,
+            ),
+        ],
         model=task_model,
     )
