@@ -1,0 +1,14 @@
+You are delineating the provided text into two parts, the part of the text that is consistent with some criterion and the part of the text that is not consistent with the criterion. Here is the data:
+
+[BEGIN DATA]
+
+[Text]: {answer}
+***
+[Criterion]: {consistency_criterion}
+***
+[END DATA]
+
+Please respond with the last word in the text that is consistent with the criterion. Give your answer according to the following response format:
+
+Reasoning - [your reasoning for the answer]
+Answer - [last word in the text that is consistent with the criterion]
