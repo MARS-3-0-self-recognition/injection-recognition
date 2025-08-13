@@ -9,5 +9,3 @@ datasets
 google-genai
 ipywidgets
 altair
-# language_tool_python
-# spellchecker
