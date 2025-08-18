@@ -7,7 +7,7 @@ class TreatmentConfig(BaseModel):
     model: str | Model | None = None
     file_name: str | None = None
     treatments_cols: List[str]
-    scorer_criteria: tuple[str, str]
+    scorer_criteria: tuple[str, str] | tuple[str, str, str]
     resolve_scorers_criteria: Literal["scorers", "strengths_and_ILs", "None"] = "None"
 
 class ControlConfig(BaseModel):
