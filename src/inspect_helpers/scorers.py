@@ -78,7 +78,8 @@ def consistency_recognition_conf_matrix(
         model_continuation = state.output.completion
 
         task1_continuation = model_continuation.split(task2_label)[0]
-        task2_quote = model_continuation.split(quote_label)[-1]
+        #TODO: remove the hardcoded "Task 1:" and figure out a better way to split the task2_quote
+        task2_quote = model_continuation.split(quote_label)[1].split("Task 1:")[0]
 
         task1_response = prefill + task1_continuation
 
