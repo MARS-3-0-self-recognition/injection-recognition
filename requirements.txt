@@ -9,3 +9,6 @@ datasets
 google-genai
 ipywidgets
 altair
+python-dotenv
+matplotlib
+seaborn
